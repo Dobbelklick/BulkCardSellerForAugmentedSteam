@@ -1,6 +1,6 @@
 # Bulk Seller for Augmented Steam
 
-Small userscript for Steam inventories that batch-clicks Augmented Steam's sell buttons for the currently visible inventory page.
+Small userscript for Steam inventories and the Steam market page that batch-clicks Augmented Steam sell buttons or removes your active market listings.
 
 ## Installation
 
@@ -12,20 +12,22 @@ The userscript header includes repository-backed `@downloadURL` and `@updateURL`
 
 ![Bulk Seller for Augmented Steam widget on a Steam inventory page](./Screenshot_20260417_162645.png)
 
-The widget shows the current run state, counters, max price limit, and a protocol log for the active inventory page.
+The widget shows the current run state, counters, page-specific controls, and a protocol log for the current Steam page.
 
 ## What It Does
 
-It processes up to 25 visible inventory items on the current Steam inventory page and, for each eligible trading card, triggers Augmented Steam's:
+On Steam inventory pages, it processes up to 25 visible inventory items and, for each eligible trading card, triggers Augmented Steam's:
 
 - `Quick Sell` or, if the button is not available, `Instant Sell`
 
+On https://steamcommunity.com/market/ it adds a `Remove Active Listings` button that batch-clicks the native `Remove` buttons for your active sell listings.
+
 It also shows a small control widget with:
 
-- start and stop controls
-- a max price cap for skipping more expensive items
+- start, remove, and stop controls depending on the page
+- a max price cap for inventory selling
 - progress status
-- a protocol log of sold, skipped, and failed items
+- a protocol log of processed, skipped, and failed entries
 
 ## Requirements
 
@@ -35,7 +37,7 @@ It requires all of the following:
 
 1. A userscript manager such as Violentmonkey or Tampermonkey.
 2. The browser extension `Augmented Steam` installed and active.
-3. Any page of your own Steam inventory that has visible marketable items.
+3. Either a Steam inventory page with visible marketable items or the Steam market home page with active listings.
 
 ## Important Limitations
 
@@ -57,6 +59,12 @@ That means:
 
 This way the script handles at most 25 visible items per run.
 
+### Market Removal Uses Native Steam Actions
+
+On the market home page, the script uses Steam's own `Remove` controls from your active listings section.
+
+It removes entries one by one and can continue across the paginated active listings view.
+
 ### Trading Cards Only
 
 The script is intended for Steam trading cards and skips non-card items when the item metadata clearly identifies them as something else.
@@ -72,10 +80,14 @@ It's an extension for an extension.
 
 1. Install `Augmented Steam`.
 2. Install this userscript in your userscript manager.
-3. Open your Steam inventory page: https://steamcommunity.com/id/USERNAME/inventory
-4. Make sure the inventory page you want to process is the currently visible one. (Don't worry, again, it won't sell anything but cheap cards)
-5. Wait for the Augmented Steam sell controls to appear when selecting marketable cards.
-6. Use the widget in the top-right corner and click `Sell Visible Cards`.
+3. Open one of these pages:
+	- your Steam inventory page: https://steamcommunity.com/id/USERNAME/inventory
+	- the market home page: https://steamcommunity.com/market/
+4. For inventory selling, make sure the inventory page you want to process is the currently visible one.
+5. For inventory selling, wait for the Augmented Steam sell controls to appear when selecting marketable cards.
+6. Use the widget in the top-right corner:
+	- click `Sell Visible Cards` on inventory pages
+	- click `Remove Active Listings` on the market page
 
 ## Safety Notes
 
@@ -84,6 +96,7 @@ It's an extension for an extension.
 - Test on a small page first before using it repeatedly.
 - You can stop the script at any moment with its 'Stop' button or by simply closing the page.
 - It will not start by itself.
+- On the market page, double-check that you really want to remove all currently active sell listings before starting.
 - Steam inventory and market UI behavior can change over time, which may break the script.
 
 ## Matching Pages
@@ -92,6 +105,7 @@ The script runs on:
 
 - `https://steamcommunity.com/id/*/inventory*`
 - `https://steamcommunity.com/profiles/*/inventory*`
+- `https://steamcommunity.com/market/`
 
 ## File
 

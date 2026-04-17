@@ -9,6 +9,7 @@
 // @updateURL    https://raw.githubusercontent.com/Dobbelklick/BulkCardSellerForAugmentedSteam/main/bulk-card-seller-for-augmented-steam.meta.js
 // @match        https://steamcommunity.com/id/*/inventory*
 // @match        https://steamcommunity.com/profiles/*/inventory*
+// @match        https://steamcommunity.com/market/
 // @run-at       document-end
 // @grant        none
 // ==/UserScript==

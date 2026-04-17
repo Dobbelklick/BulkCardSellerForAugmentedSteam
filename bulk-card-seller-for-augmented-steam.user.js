@@ -9,6 +9,7 @@
 // @updateURL    https://raw.githubusercontent.com/Dobbelklick/BulkCardSellerForAugmentedSteam/main/bulk-card-seller-for-augmented-steam.meta.js
 // @match        https://steamcommunity.com/id/*/inventory*
 // @match        https://steamcommunity.com/profiles/*/inventory*
+// @match        https://steamcommunity.com/market/
 // @run-at       document-end
 // @grant        none
 // ==/UserScript==
@@ -26,10 +27,14 @@
         interItemDelayMs: 3500,
         selectionSettledDelayMs: 250,
         postSellSettledDelayMs: 1000,
+        marketRemoveDelayMs: 300,
+        marketPageChangeDelayMs: 1200,
         pollIntervalMs: 150,
         itemInfoTimeoutMs: 4000,
         sellControlsTimeoutMs: 5000,
         postSellTimeoutMs: 5000,
+        marketRemoveTimeoutMs: 12000,
+        marketPageChangeTimeoutMs: 8000,
         strictCardFilter: true,
         cardTagTexts: ["Trading Card"],
         uiPosition: {
@@ -54,6 +59,7 @@
     const ui = {
         root: null,
         startButton: null,
+        removeListingsButton: null,
         stopButton: null,
         status: null,
         counters: null,
@@ -62,9 +68,16 @@
         progressFill: null,
         progressLabel: null,
         protocolTableBody: null,
+        settingsRow: null,
         maxPriceInput: null,
         maxPricePrefix: null,
         maxPriceSuffix: null
+    };
+
+    const PAGE_MODE = {
+        inventory: "inventory",
+        market: "market",
+        unsupported: "unsupported"
     };
 
     const STEAM_CURRENCY_FORMATS = {
@@ -173,6 +186,27 @@
         return element?.textContent?.replace(/\s+/g, " ").trim() ?? "";
     }
 
+    function getPageMode() {
+        const path = window.location.pathname;
+        if (/^\/(id|profiles)\/[^/]+\/inventory/.test(path)) {
+            return PAGE_MODE.inventory;
+        }
+
+        if (path === "/market/" || path === "/market") {
+            return PAGE_MODE.market;
+        }
+
+        return PAGE_MODE.unsupported;
+    }
+
+    function isInventoryPage() {
+        return getPageMode() === PAGE_MODE.inventory;
+    }
+
+    function isMarketPage() {
+        return getPageMode() === PAGE_MODE.market;
+    }
+
     function updateState(message) {
         if (message) {
             state.lastMessage = message;
@@ -183,19 +217,28 @@
         }
 
         if (ui.counters) {
+            const successLabel = isMarketPage() ? "Removed" : "Sold";
             ui.counters.textContent = [
-                `Sold ${state.sold}`,
+                `${successLabel} ${state.sold}`,
                 `Skipped ${state.skipped}`,
                 `Failed ${state.failed}`
             ].join(" | ");
         }
 
         if (ui.startButton) {
-            ui.startButton.disabled = state.running;
+            ui.startButton.disabled = state.running || !isInventoryPage();
+        }
+
+        if (ui.removeListingsButton) {
+            ui.removeListingsButton.disabled = state.running || !isMarketPage();
         }
 
         if (ui.stopButton) {
             ui.stopButton.disabled = !state.running;
+        }
+
+        if (ui.settingsRow) {
+            ui.settingsRow.style.display = isInventoryPage() ? "flex" : "none";
         }
     }
 
@@ -296,6 +339,20 @@
         setSleepProgress(false, 0, "");
         if (ui.protocolTableBody) {
             ui.protocolTableBody.textContent = "";
+        }
+    }
+
+    function updateWidgetForCurrentPage() {
+        if (!ui.startButton || !ui.removeListingsButton) {
+            return;
+        }
+
+        const pageMode = getPageMode();
+        ui.startButton.style.display = pageMode === PAGE_MODE.inventory ? "block" : "none";
+        ui.removeListingsButton.style.display = pageMode === PAGE_MODE.market ? "block" : "none";
+
+        if (ui.root) {
+            ui.root.style.display = pageMode === PAGE_MODE.unsupported ? "none" : "block";
         }
     }
 
@@ -423,6 +480,13 @@
         buttonStyle(startButton, "#80a006", "#ffffff");
         startButton.style.flex = "1";
 
+        const removeListingsButton = document.createElement("button");
+        removeListingsButton.type = "button";
+        removeListingsButton.textContent = "Remove Active Listings";
+        buttonStyle(removeListingsButton, "#b84a2a", "#ffffff");
+        removeListingsButton.style.flex = "1";
+        removeListingsButton.style.display = "none";
+
         const stopButton = document.createElement("button");
         stopButton.type = "button";
         stopButton.textContent = "Stop";
@@ -431,6 +495,10 @@
 
         startButton.addEventListener("click", () => {
             void startRun();
+        });
+
+        removeListingsButton.addEventListener("click", () => {
+            void startRemoveListingsRun();
         });
 
         stopButton.addEventListener("click", () => {
@@ -478,12 +546,13 @@
         protocolTable.append(protocolHead, protocolTableBody);
         protocolWrap.append(protocolTable);
 
-        actions.append(startButton, stopButton);
+        actions.append(startButton, removeListingsButton, stopButton);
         root.append(title, status, counters, detail, progressTrack, progressLabel, settingsRow, actions, protocolTitle, protocolWrap);
         document.body.append(root);
 
         ui.root = root;
         ui.startButton = startButton;
+        ui.removeListingsButton = removeListingsButton;
         ui.stopButton = stopButton;
         ui.status = status;
         ui.counters = counters;
@@ -492,11 +561,13 @@
         ui.progressFill = progressFill;
         ui.progressLabel = progressLabel;
         ui.protocolTableBody = protocolTableBody;
+        ui.settingsRow = settingsRow;
         ui.maxPriceInput = maxPriceInput;
         ui.maxPricePrefix = maxPricePrefix;
         ui.maxPriceSuffix = maxPriceSuffix;
 
         updateMaxPriceCurrencyDisplay();
+        updateWidgetForCurrentPage();
         updateState("Idle");
     }
 
@@ -803,6 +874,65 @@
     }
 
     // =========================================================================
+    // Market Listing Introspection
+    // =========================================================================
+
+    function getActiveListingsRows() {
+        const container = document.getElementById("tabContentsMyActiveMarketListingsRows");
+        if (!container || !isVisible(container)) {
+            return [];
+        }
+
+        return Array.from(container.querySelectorAll(".market_listing_row"))
+            .filter(row => isVisible(row));
+    }
+
+    function getActiveListingRemoveButton(row) {
+        if (!row) {
+            return null;
+        }
+
+        const buttons = Array.from(row.querySelectorAll("a.item_market_action_button"));
+        return buttons.find(button => /^remove$/i.test(textContent(button))) ?? null;
+    }
+
+    function getActiveListingName(row) {
+        return textContent(row?.querySelector(".market_listing_item_name")) || row?.id || "Unknown listing";
+    }
+
+    function getActiveListingsTotal() {
+        const totalNode = document.getElementById("tabContentsMyActiveMarketListings_total");
+        const total = Number.parseInt(textContent(totalNode), 10);
+        return Number.isFinite(total) ? total : getActiveListingsRows().length;
+    }
+
+    function getActiveListingsNextButton() {
+        const button = document.getElementById("tabContentsMyActiveMarketListings_btn_next");
+        if (!button || button.classList.contains("disabled") || !isVisible(button)) {
+            return null;
+        }
+
+        return button;
+    }
+
+    function getActiveListingsPageMarker() {
+        const start = textContent(document.getElementById("tabContentsMyActiveMarketListings_start"));
+        const end = textContent(document.getElementById("tabContentsMyActiveMarketListings_end"));
+        const total = textContent(document.getElementById("tabContentsMyActiveMarketListings_total"));
+        return `${start}-${end}-${total}`;
+    }
+
+    function getMarketRemoveListingDialog() {
+        const dialog = document.getElementById("market_removelisting_dialog");
+        return dialog && isVisible(dialog) ? dialog : null;
+    }
+
+    function getMarketRemoveListingAcceptButton() {
+        const button = document.getElementById("market_removelisting_dialog_accept");
+        return button && isVisible(button) ? button : null;
+    }
+
+    // =========================================================================
     // Async Waits And Selection Flow
     // =========================================================================
 
@@ -892,6 +1022,57 @@
 
             return null;
         }, CONFIG.postSellTimeoutMs);
+    }
+
+    async function waitForMarketRemoveChange(row, previousTotal) {
+        return waitFor(() => {
+            if (!row.isConnected || !isVisible(row)) {
+                return "row-disappeared";
+            }
+
+            const removeButton = getActiveListingRemoveButton(row);
+            if (!removeButton || !removeButton.isConnected || !isVisible(removeButton)) {
+                return "button-disappeared";
+            }
+
+            const currentTotal = getActiveListingsTotal();
+            if (currentTotal < previousTotal) {
+                return "count-decreased";
+            }
+
+            return null;
+        }, CONFIG.marketRemoveTimeoutMs);
+    }
+
+    async function confirmMarketRemoveDialog() {
+        const confirmationState = await waitFor(() => {
+            const dialog = getMarketRemoveListingDialog();
+            const acceptButton = getMarketRemoveListingAcceptButton();
+
+            if (dialog && acceptButton) {
+                return { dialog, acceptButton };
+            }
+
+            return null;
+        }, CONFIG.marketRemoveTimeoutMs);
+
+        if (!confirmationState) {
+            return false;
+        }
+
+        confirmationState.acceptButton.click();
+        return true;
+    }
+
+    async function waitForMarketPageChange(previousMarker) {
+        return waitFor(() => {
+            const currentMarker = getActiveListingsPageMarker();
+            if (currentMarker && currentMarker !== previousMarker) {
+                return currentMarker;
+            }
+
+            return null;
+        }, CONFIG.marketPageChangeTimeoutMs);
     }
 
     // =========================================================================
@@ -1014,8 +1195,72 @@
         return { shouldDelay };
     }
 
+    async function processMarketListing(row, index) {
+        state.currentIndex = index + 1;
+        updateState(`Removing listing ${state.currentIndex}/${state.total}`);
+
+        const itemName = getActiveListingName(row);
+        const removeButton = getActiveListingRemoveButton(row);
+        if (!removeButton) {
+            state.skipped += 1;
+            setDetail(`Skipped listing without Remove button: ${itemName}`);
+            addProtocolRow({
+                index: index + 1,
+                item: itemName,
+                result: "No Remove button"
+            });
+            return { shouldDelay: false };
+        }
+
+        const previousTotal = getActiveListingsTotal();
+        setDetail(`Removing listing: ${itemName}`);
+        removeButton.click();
+
+        const didConfirm = await confirmMarketRemoveDialog();
+        if (!didConfirm) {
+            state.failed += 1;
+            setDetail(`Timed out waiting for removal confirmation for ${itemName}`);
+            addProtocolRow({
+                index: index + 1,
+                item: itemName,
+                result: "Confirm dialog timeout"
+            });
+            return { shouldDelay: true };
+        }
+
+        const removalState = await waitForMarketRemoveChange(row, previousTotal);
+        if (!removalState) {
+            state.failed += 1;
+            setDetail(`Timed out while removing ${itemName}`);
+            addProtocolRow({
+                index: index + 1,
+                item: itemName,
+                result: "Remove timeout"
+            });
+            return { shouldDelay: true };
+        }
+
+        state.sold += 1;
+        setDetail(`Removed listing: ${itemName}`);
+        addProtocolRow({
+            index: index + 1,
+            item: itemName,
+            result: removalState === "count-decreased"
+                ? "Listing removed"
+                : `Listing removed: ${removalState}`
+        });
+        await sleepWithProgress(CONFIG.marketRemoveDelayMs, "Waiting for market list to settle");
+        return { shouldDelay: false };
+    }
+
     async function startRun() {
         if (state.running) {
+            return;
+        }
+
+        if (!isInventoryPage()) {
+            updateState("Inventory page required.");
+            setDetail("Open your Steam inventory page to use Sell Visible Cards.");
             return;
         }
 
@@ -1067,6 +1312,87 @@
         }
     }
 
+    async function startRemoveListingsRun() {
+        if (state.running) {
+            return;
+        }
+
+        if (!isMarketPage()) {
+            updateState("Market page required.");
+            setDetail("Open https://steamcommunity.com/market/ to use Remove Active Listings.");
+            return;
+        }
+
+        const totalListings = getActiveListingsTotal();
+        if (totalListings === 0) {
+            updateState("No active listings found.");
+            setDetail("Open the market home page with active sell listings before starting.");
+            return;
+        }
+
+        resetRunState();
+        state.running = true;
+        state.total = totalListings;
+        updateState(`Starting removal for ${state.total} active listings.`);
+        setDetail("Collecting active listings...");
+
+        try {
+            while (!state.stopRequested) {
+                const rows = getActiveListingsRows();
+                if (rows.length === 0) {
+                    break;
+                }
+
+                const row = rows[0];
+                await processMarketListing(row, state.sold + state.skipped + state.failed);
+                updateState();
+
+                if (state.stopRequested) {
+                    break;
+                }
+
+                const remainingRows = getActiveListingsRows();
+                if (remainingRows.length > 0) {
+                    continue;
+                }
+
+                const nextButton = getActiveListingsNextButton();
+                if (!nextButton) {
+                    break;
+                }
+
+                const previousMarker = getActiveListingsPageMarker();
+                setDetail("Opening next listings page...");
+                nextButton.click();
+                const nextMarker = await waitForMarketPageChange(previousMarker);
+                if (!nextMarker) {
+                    state.failed += 1;
+                    addProtocolRow({
+                        index: state.sold + state.skipped + state.failed,
+                        item: "Listings pager",
+                        result: "Next page timeout"
+                    });
+                    setDetail("Timed out while opening the next listings page.");
+                    break;
+                }
+                await sleepWithProgress(CONFIG.marketPageChangeDelayMs, "Waiting for next listings page");
+            }
+        } catch (caught) {
+            state.failed += 1;
+            setDetail(`Unexpected error: ${caught instanceof Error ? caught.message : String(caught)}`);
+        } finally {
+            state.running = false;
+            setSleepProgress(false, 0, "");
+
+            const completionMessage = state.stopRequested
+                ? "Removal stopped."
+                : "Removal finished.";
+
+            updateState(completionMessage);
+            setDetail(`${completionMessage} Removed ${state.sold}, skipped ${state.skipped}, failed ${state.failed}.`);
+        }
+    }
+
     // =========================================================================
     // Bootstrap And Debug Hooks
     // =========================================================================
@@ -1074,13 +1400,17 @@
     function bootstrap() {
         createWidget();
         updateMaxPriceCurrencyDisplay();
+        updateWidgetForCurrentPage();
 
         window.asBulkSeller = {
             config: CONFIG,
             state,
             start: () => void startRun(),
+            removeListings: () => void startRemoveListingsRun(),
             stop: () => requestStop("Stop requested from console."),
+            getPageMode,
             getVisibleInventoryItems,
+            getActiveListingsRows,
             getActiveItemInfoPanel,
             getSellButtons
         };
