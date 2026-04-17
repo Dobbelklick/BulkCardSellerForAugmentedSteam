@@ -2,6 +2,14 @@
 
 Small userscript for Steam inventories that batch-clicks Augmented Steam's sell buttons for the currently visible inventory page.
 
+## Installation
+
+Install directly in Violentmonkey from the repository using the raw userscript URL:
+
+- [Install bulk-card-seller-for-augmented-steam.user.js](https://raw.githubusercontent.com/Dobbelklick/BulkCardSellerForAugmentedSteam/main/bulk-card-seller-for-augmented-steam.user.js)
+
+The userscript header includes repository-backed `@downloadURL` and `@updateURL` entries, so Violentmonkey can check this repo for updates after installation.
+
 ![Bulk Seller for Augmented Steam widget on a Steam inventory page](./Screenshot_20260417_162645.png)
 
 The widget shows the current run state, counters, max price limit, and a protocol log for the active inventory page.
