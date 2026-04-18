@@ -24,7 +24,7 @@
     const CONFIG = {
         maxVisibleItems: 25,
         defaultMaxSellPrice: 0.10,
-        interItemDelayMs: 3500,
+        interItemDelayMs: 2000,
         selectionSettledDelayMs: 250,
         postSellSettledDelayMs: 1000,
         marketRemoveDelayMs: 300,
@@ -71,7 +71,9 @@
         settingsRow: null,
         maxPriceInput: null,
         maxPricePrefix: null,
-        maxPriceSuffix: null
+        maxPriceSuffix: null,
+        preferInstantSellCheckbox: null,
+        instantSellRow: null
     };
 
     const PAGE_MODE = {
@@ -239,6 +241,10 @@
 
         if (ui.settingsRow) {
             ui.settingsRow.style.display = isInventoryPage() ? "flex" : "none";
+        }
+
+        if (ui.instantSellRow) {
+            ui.instantSellRow.style.display = isInventoryPage() ? "flex" : "none";
         }
     }
 
@@ -469,6 +475,26 @@
 
         settingsRow.append(maxPriceLabel, maxPriceControl);
 
+        const instantSellRow = document.createElement("div");
+        instantSellRow.style.display = "flex";
+        instantSellRow.style.alignItems = "center";
+        instantSellRow.style.gap = "6px";
+        instantSellRow.style.marginBottom = "10px";
+
+        const preferInstantSellCheckbox = document.createElement("input");
+        preferInstantSellCheckbox.type = "checkbox";
+        preferInstantSellCheckbox.id = "as-bulk-prefer-instant-sell";
+
+        const preferInstantSellLabel = document.createElement("label");
+        preferInstantSellLabel.htmlFor = "as-bulk-prefer-instant-sell";
+        preferInstantSellLabel.textContent = "Prefer Instant Sell over Quick Sell";
+        preferInstantSellLabel.style.color = "#b8c6d3";
+        preferInstantSellLabel.style.fontSize = "11px";
+        preferInstantSellLabel.style.fontWeight = "600";
+        preferInstantSellLabel.style.cursor = "pointer";
+
+        instantSellRow.append(preferInstantSellCheckbox, preferInstantSellLabel);
+
         const actions = document.createElement("div");
         actions.style.display = "flex";
         actions.style.gap = "8px";
@@ -547,7 +573,7 @@
         protocolWrap.append(protocolTable);
 
         actions.append(startButton, removeListingsButton, stopButton);
-        root.append(title, status, counters, detail, progressTrack, progressLabel, settingsRow, actions, protocolTitle, protocolWrap);
+        root.append(title, status, counters, detail, progressTrack, progressLabel, settingsRow, instantSellRow, actions, protocolTitle, protocolWrap);
         document.body.append(root);
 
         ui.root = root;
@@ -565,6 +591,8 @@
         ui.maxPriceInput = maxPriceInput;
         ui.maxPricePrefix = maxPricePrefix;
         ui.maxPriceSuffix = maxPriceSuffix;
+        ui.preferInstantSellCheckbox = preferInstantSellCheckbox;
+        ui.instantSellRow = instantSellRow;
 
         updateMaxPriceCurrencyDisplay();
         updateWidgetForCurrentPage();
@@ -1150,8 +1178,11 @@
             return { shouldDelay: false };
         }
 
-        const button = sellState.buttons.quick || sellState.buttons.instant;
-        const mode = sellState.buttons.quick ? "Quick Sell" : "Instant Sell";
+        const preferInstantSell = ui.preferInstantSellCheckbox?.checked ?? false;
+        const button = preferInstantSell
+            ? (sellState.buttons.instant || sellState.buttons.quick)
+            : (sellState.buttons.quick || sellState.buttons.instant);
+        const mode = button === sellState.buttons.instant ? "Instant Sell" : "Quick Sell";
         let shouldDelay = true;
         const buttonPrice = getButtonPrice(button);
         const maxSellPrice = getMaxSellPrice();
