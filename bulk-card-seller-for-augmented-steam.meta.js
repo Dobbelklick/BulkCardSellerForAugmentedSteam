@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bulk Seller for Augmented Steam extension
 // @namespace    https://github.com/Dobbelklick/BulkCardSellerForAugmentedSteam
-// @version      1.1
+// @version      1.2
 // @description  Batch-click Augmented Steam Quick Sell or Instant Sell for the 25 visible inventory items on the current Steam inventory page.
 // @homepageURL  https://github.com/Dobbelklick/BulkCardSellerForAugmentedSteam
 // @supportURL   https://github.com/Dobbelklick/BulkCardSellerForAugmentedSteam/issues
